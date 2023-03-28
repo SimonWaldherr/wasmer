@@ -25,8 +25,8 @@ use wasmer::{
 use wasmer_cache::Cache;
 use wasmer_compiler::ArtifactBuild;
 use wasmer_registry::Package;
-use wasmer_wasix::runners::{MappedDirectory, Runner, WapmContainer};
-use webc::{metadata::Manifest, v1::DirOrFile};
+use wasmer_wasix::runners::{MappedDirectory, Runner};
+use webc::{metadata::Manifest, v1::DirOrFile, Container};
 
 use crate::{
     store::StoreOptions,
@@ -110,7 +110,7 @@ impl RunUnstable {
     fn execute_webc(
         &self,
         target: &TargetOnDisk,
-        container: &WapmContainer,
+        container: &Container,
         store: &mut Store,
     ) -> Result<(), Error> {
         let id = match self.entrypoint.as_deref() {
@@ -439,7 +439,7 @@ impl TargetOnDisk {
         match self {
             TargetOnDisk::Webc(webc) => {
                 // As an optimisation, try to use the mmapped version first.
-                if let Ok(container) = WapmContainer::from_path(webc.clone()) {
+                if let Ok(container) = Container::from_disk(webc.clone()) {
                     return Ok(ExecutableTarget::Webc(container));
                 }
 
@@ -447,7 +447,7 @@ impl TargetOnDisk {
                 // into memory.
                 let bytes = std::fs::read(webc)
                     .with_context(|| format!("Unable to read \"{}\"", webc.display()))?;
-                let container = WapmContainer::from_bytes(bytes.into())?;
+                let container = Container::from_bytes(bytes)?;
 
                 Ok(ExecutableTarget::Webc(container))
             }
@@ -457,7 +457,7 @@ impl TargetOnDisk {
                 let webc = compile_directory_to_webc(dir).with_context(|| {
                     format!("Unable to bundle \"{}\" as a WEBC package", dir.display())
                 })?;
-                let container = WapmContainer::from_bytes(webc.into())
+                let container = Container::from_bytes(webc)
                     .context("Unable to parse the generated WEBC file")?;
 
                 Ok(ExecutableTarget::Webc(container))
@@ -532,7 +532,7 @@ fn compile_wasm_cached(
 #[derive(Debug, Clone)]
 enum ExecutableTarget {
     WebAssembly(Module),
-    Webc(WapmContainer),
+    Webc(Container),
 }
 
 fn generate_coredump(err: &Error, source: &Path, coredump_path: &Path) -> Result<(), Error> {
